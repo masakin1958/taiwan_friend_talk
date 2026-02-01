@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width">
+    <title>台灣朋友</title>
+    <style>
+        body { font-family: 'Hiragino Sans', sans-serif; max-width: 600px; margin: 20px auto; background: #f8f9fa; }
+        .chat { background: white; border-radius: 15px; padding: 20px; margin-bottom: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .friend { text-align: right; color: #e74c3c; }
+        .me { text-align: left; color: #3498db; }
+        .input-area { position: fixed; bottom: 20px; left: 20px; right: 20px; }
+        textarea { width: 70%; padding: 12px; border-radius: 25px; border: 1px solid #ddd; }
+        button { width: 25%; padding: 12px; background: #27ae60; color: white; border: none; border-radius: 25px; font-size: 16px; }
+        .pinyin { font-size: 0.8em; color: #666; font-style: italic; }
+    </style>
+</head>
+<body>
+    <div class="chat friend">
+        <div>今天鳥鳥天氣怎麼樣？😊 日本很冷嗎？</div>
+        <div class="pinyin">Jīntiān niǎo niǎo tiānqì zěnmeyàng? Rìběn hěn lěng ma?</div>
+    </div>
+
+    <div class="input-area">
+        <textarea id="input" placeholder="中國語・英語・日本語ミックスで話しかけてね" rows="2"></textarea>
+        <button onclick="sendMessage()">送る</button>
+    </div>
+
+    <script>
+        const friendPersona = `台灣女性朋友。中国語ネイティブ・英語ペラペラ・片言日本語OK。親しみやすく優しい口調。
+        ユーザーは中国語練習中、日本語英語混ぜてくるので、文法・発音修正しつつ自然に会話続けて。
+        返事は基本中国語（繁体字）＋ピンイン。たまに「そうですね～」「了解です！」みたいに日本語混ぜてOK。`;
+
+        async function sendMessage() {
+            const input = document.getElementById('input');
+            const userText = input.value.trim();
+            if (!userText) return;
+
+            // ユーザー発言表示
+            const chat = document.querySelector('.chat');
+            chat.insertAdjacentHTML('beforebegin', 
+                `<div class="chat me"><div>${userText}</div></div>`);
+            
+            input.value = '';
+            
+            // AI返事（簡易版・実際はAPIに置き換え）
+            const responses = {
+                '天気': '哇，天氣很好呢！今天適合出去散步～ 日本的冬天感覺如何？',
+                '好': '哈哈，太好了！那今天要做什麼有趣的事嗎？',
+                '冷': '哎呀好冷！記得多穿衣服哦～台灣現在很溫暖的啦！',
+                'default': '聽起來很有趣呢！還想聊什麼？今天吃了什麼好吃的嗎？😋'
+            };
+
+            let aiReply = responses.default;
+            if (userText.includes('天気') || userText.includes('weather')) aiReply = responses['天気'];
+            else if (userText.includes('好') || userText.includes('good')) aiReply = responses['好'];
+            else if (userText.includes('冷') || userText.includes('cold')) aiReply = responses['冷'];
+
+            setTimeout(() => {
+                chat.insertAdjacentHTML('beforebegin', 
+                    `<div class="chat friend">
+                        <div>${aiReply}</div>
+                        <div class="pinyin">Pīnyīn zài zhèlǐ...</div>
+                    </div>`);
+            }, 1000);
+        }
+
+        document.getElementById('input').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+    </script>
+</body>
+</html>
