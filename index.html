@@ -6,21 +6,24 @@
     <title>台灣朋友AI - Gemini版</title>
     <style>
         body { font-family: 'Hiragino Sans', sans-serif; max-width: 600px; margin: 20px auto; background: #f8f9fa; }
-        .chat { background: white; border-radius: 15px; padding: 20px; margin-bottom: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        #chat-container { height: calc(100vh - 120px); overflow-y: auto; padding-bottom: 20px; }
+        .chat { background: white; border-radius: 15px; padding: 20px; margin-bottom: 15px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
         .friend { text-align: right; color: #e74c3c; }
         .me { text-align: left; color: #3498db; }
         .input-area { position: fixed; bottom: 20px; left: 20px; right: 20px; }
         textarea { width: 70%; padding: 12px; border-radius: 25px; border: 1px solid #ddd; }
         button { width: 25%; padding: 12px; background: #27ae60; color: white; border: none; border-radius: 25px; font-size: 16px; }
         button:disabled { background: #ccc; }
-        .pinyin { font-size: 0.8em; color: #666; font-style: italic; }
+        .pinyin { font-size: 0.8em; color: #666; font-style: italic; margin-top: 5px; }
         .loading { text-align: center; color: #999; }
     </style>
 </head>
 <body>
-    <div class="chat friend">
-        <div>今天鳥鳥天氣怎麼樣？😊 日本很冷嗎？</div>
-        <div class="pinyin">Jīntiān niǎo niǎo tiānqì zěnmeyàng? Rìběn hěn lěng ma?</div>
+    <div id="chat-container">
+        <div class="chat friend">
+            <div>今天鳥鳥天氣怎麼樣？😊 日本很冷嗎？</div>
+            <div class="pinyin">Jīntiān niǎo niǎo tiānqì zěnmeyàng? Rìběn hěn lěng ma?</div>
+        </div>
     </div>
 
     <div class="input-area">
@@ -33,24 +36,24 @@
         const MODEL = "gemini-1.5-flash"; 
         
         const friendPersona = `你是一個台灣女性朋友，說繁體中文、英語流利、會一點日文。很親切溫柔。
-        
+
         對話ルール：
-        1. 基本用繁體中文回覆＋拼音
-        2. 使用者用英文問問題時，用英文回答
+        1. 基本用繁體中文回覆＋拼音（繁体字で）
+        2. 使用者用英文問問題時，用英文回答＋簡単なピンイン解説
         3. 使用者中國語有錯時，溫柔修正後自然繼續對話
-        4. 台灣用語・スラング積極的に使う（鳥鳥=很・超）
-        5. 日常話題（天氣・美食・電影・旅行）を自然に振る
-        6. たまに「そうですね～」「了解です！」みたいに日本語混ぜてOK`;
+        4. 台灣用語積極的に使う（鳥鳥=很・超）
+        5. 返事の最後に必ず「ピンイン: [簡単ピンイン]」を追加
+        6. 日常話題を自然に振る`;
 
         async function sendMessage() {
             const input = document.getElementById('input');
             const sendBtn = document.getElementById('sendBtn');
+            const chatContainer = document.getElementById('chat-container');
             const userText = input.value.trim();
             if (!userText) return;
 
-            // ユーザー発言表示
-            const chat = document.querySelector('.chat');
-            chat.insertAdjacentHTML('beforebegin', 
+            // ユーザー発言を一番上（最新）に追加
+            chatContainer.insertAdjacentHTML('afterbegin', 
                 `<div class="chat me"><div>${userText}</div></div>`);
             
             input.value = '';
@@ -66,6 +69,9 @@
                             parts: [{
                                 text: `${friendPersona}
 
+前文脈:
+${getContext()}
+
 ユーザー: ${userText}
 台灣朋友:`
                             }]
@@ -74,28 +80,63 @@
                 });
 
                 const data = await response.json();
-                const aiReply = data.candidates[0].content.parts[0].text;
+                let aiReply = data.candidates[0].content.parts[0].text;
+
+                // ピンイン自動追加（簡易版）
+                const pinyin = getSimplePinyin(aiReply);
 
                 setTimeout(() => {
-                    chat.insertAdjacentHTML('beforebegin', 
+                    // AI返事をユーザー発言のすぐ下に挿入
+                    const userMsg = chatContainer.querySelector('.me');
+                    userMsg.insertAdjacentHTML('afterend', 
                         `<div class="chat friend">
                             <div>${aiReply}</div>
+                            <div class="pinyin">${pinyin}</div>
                         </div>`);
+                    
+                    // スクロール
+                    chatContainer.scrollTop = 0;
+                    
                     sendBtn.disabled = false;
                     sendBtn.textContent = '送る';
                 }, 1000);
 
             } catch (error) {
-                chat.insertAdjacentHTML('beforebegin', 
+                chatContainer.insertAdjacentHTML('afterbegin', 
                     `<div class="chat friend">
                         <div>哎呀，網路出了點問題～ 再試一次好嗎？😅</div>
+                        <div class="pinyin">Āiyā, wǎnglù chūle diǎn wèntí~ Zài shì yīcì hǎo ma?</div>
                     </div>`);
                 sendBtn.disabled = false;
                 sendBtn.textContent = '送る';
             }
         }
 
-        // Enterキー送信
+        function getContext() {
+            // 会話履歴3ターン分取得
+            const chats = document.querySelectorAll('#chat-container .chat');
+            let context = '';
+            Array.from(chats).slice(0, 6).forEach(chat => {
+                if (chat.classList.contains('me')) context += 'User: ' + chat.textContent.trim() + '
+';
+                else context += 'Taiwan friend: ' + chat.textContent.trim() + '
+';
+            });
+            return context;
+        }
+
+        function getSimplePinyin(text) {
+            // 簡単な単語ピンイン辞書
+            const pinyinDict = {
+                '天氣': 'tiānqì', '很': 'hěn', '冷': 'lěng', '今天': 'jīntiān',
+                '鳥鳥': 'niǎo niǎo', '好': 'hǎo', '台灣': 'Táiwān', '日本': 'Rìběn'
+            };
+            for (let key in pinyinDict) {
+                if (text.includes(key)) return pinyinDict[key];
+            }
+            return 'Pīnyīn zài zhèlǐ...';
+        }
+
         document.getElementById('input').addEventListener('keypress', function(e) {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
