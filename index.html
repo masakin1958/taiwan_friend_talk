@@ -12,11 +12,12 @@
         .input-area { position: sticky; bottom: 0; background: white; padding: 10px; }
         textarea { width: 70%; padding: 10px; }
         button { width: 28%; padding: 10px; background: #27ae60; color: white; border: none; }
+        .pinyin { font-size: 0.8em; color: #666; }
     </style>
 </head>
 <body>
     <div id="messages">
-        <div class="friend">今天鳥鳥天氣怎麼樣？😊 日本很冷嗎？</div>
+        <div class="friend">今天鳥鳥天氣怎麼樣？<br><span class="pinyin">Jīntiān niǎo niǎo tiānqì zěnmeyàng?</span></div>
     </div>
     
     <div class="input-area">
@@ -25,43 +26,42 @@
     </div>
 
     <script>
-        const API_KEY = "AIzaSyBy06ukTAFccmTLHb0WAmgEzzXyuk9G3UE"; // ←ここ確認！
+        const API_KEY = "AIzaSyBy06ukTAFccmTLHb0WAmgEzzXyuk9G3UE"; // ←君のキー確認！
         
         async function sendMessage() {
             const input = document.getElementById('input');
-            const btn = event.target;
+            const btn = document.querySelector('button');
             const msg = input.value.trim();
             if (!msg) return;
             
-            // ユーザー発言（一番下に追加）
-            document.getElementById('messages').innerHTML += 
-                `<div class="me">${msg}</div>`;
+            // ユーザー発言
+            document.getElementById('messages').innerHTML += `<div class="me">${msg}</div>`;
             input.value = '';
-            btn.disabled = true;
             btn.textContent = '送信中...';
             
             try {
-                const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${API_KEY}`, {
+                const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({
-                        contents: [{parts: [{text: `台灣女性友達として、${msg}に自然に返事して。繁体字中国語＋ピンインで。親しみやすく！`}]}]
+                        contents: [{parts: [{text: `台灣女性友達として自然に返事して。中国語＋ピンインで。${msg}`}]}]
                     })
                 });
+                
+                if (!res.ok) throw new Error('API error');
                 
                 const data = await res.json();
                 const reply = data.candidates[0].content.parts[0].text;
                 
-                // AI返事（一番下に追加）
+                // AI返事＋ピンイン
                 document.getElementById('messages').innerHTML += 
-                    `<div class="friend">${reply}</div>`;
+                    `<div class="friend">${reply}<br><span class="pinyin">Pīnyīn...</span></div>`;
                     
             } catch(e) {
                 document.getElementById('messages').innerHTML += 
-                    `<div class="friend">あれ？エラーが出ちゃった～。もう一度試してみて！</div>`;
+                    `<div class="friend">網路小問題，再試一次吧！😅</div>`;
             }
             
-            btn.disabled = false;
             btn.textContent = '送る';
             document.getElementById('messages').scrollTop = 9999;
         }
