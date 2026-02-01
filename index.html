@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width">
-    <title>台灣朋友AI</title>
+    <title>台灣朋友AI - Grok版</title>
     <style>
         body { font-family: sans-serif; max-width: 600px; margin: 20px auto; }
         #messages { height: 60vh; overflow-y: auto; border: 1px solid #ddd; padding: 10px; }
@@ -26,7 +26,7 @@
     </div>
 
     <script>
-        const API_KEY = "AIzaSyBy06ukTAFccmTLHb0WAmgEzzXyuk9G3UE"; // ←これだけ正しく！
+        const API_KEY = "xai_君のキー"; // console.x.ai で取得！
         
         async function sendMessage() {
             const input = document.getElementById('input');
@@ -34,27 +34,32 @@
             const msg = input.value.trim();
             if (!msg) return;
             
+            // ユーザー発言（左）
             document.getElementById('messages').innerHTML += `<div class="me">${msg}</div>`;
-            input.value = ''; btn.textContent = '送信中...';
+            input.value = '';
+            btn.textContent = '送信中...';
             
             try {
-                const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`, {
+                const res = await fetch('https://api.x.ai/v1/chat/completions', {
                     method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
+                    headers: {
+                        'Authorization': `Bearer ${API_KEY}`,
+                        'Content-Type': 'application/json'
+                    },
                     body: JSON.stringify({
-                        contents: [{parts: [{text: `台灣女性として自然に返事。中国語のみ。${msg}`}]}]
+                        model: 'grok-beta',
+                        messages: [{role: 'user', content: `台灣女性友達として自然に返事して。中国語で：${msg}`}],
+                        max_tokens: 200
                     })
                 });
                 
-                if (!res.ok) {
-                    throw new Error(`HTTP ${res.status}`);
-                }
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
                 
                 const data = await res.json();
-                const reply = data.candidates[0].content.parts[0].text;
+                const reply = data.choices[0].message.content;
                 
-                document.getElementById('messages').innerHTML += 
-                    `<div class="friend">${reply}</div>`;
+                // AI返事（右）
+                document.getElementById('messages').innerHTML += `<div class="friend">${reply}</div>`;
                     
             } catch(e) {
                 document.getElementById('messages').innerHTML += 
