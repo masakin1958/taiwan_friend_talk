@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>台灣朋友 (Taiwan Friend) - GitHub Secure Master</title>
+  <title>台灣朋友 (Taiwan Friend) - Master Edition</title>
   
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
@@ -14,8 +14,8 @@
     .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
     ::-webkit-scrollbar { width: 4px; }
     ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
-    .voice-loading { animation: pulse 1.5s infinite; }
-    @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+    .debug-pulse { animation: pulse 2s infinite; }
+    @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.4; } 100% { opacity: 1; } }
   </style>
 </head>
 <body class="bg-stone-50 overflow-hidden text-stone-800">
@@ -33,11 +33,9 @@
     function App() {
       const [apiKey, setApiKey] = useState(localStorage.getItem('gemini_api_key_v3') || "");
       const [tempKey, setTempKey] = useState("");
-      
-      // 最初から中国語のみで表示するように修正
       const [messages, setMessages] = useState([{
         id: 1, role: 'model',
-        reply: '你好！我是你的台灣朋友。我們來聊天吧！你可以用中文、日文或英文跟我說話喔。',
+        reply: '你好！我是你的台灣朋友。我們来聊天吧！你可以用中文、日文或英文跟我說話喔。',
         replyPinyin: 'Nǐ hǎo! Wǒ shì nǐ de Táiwān péngyǒu. Wǒmen lái liáotiān ba! Nǐ kěyǐ yòng zhōngwén, rìwén huò yīngwén gēn wǒ shuōhuà ō.',
         translation: 'こんにちは！私はあなたの台湾の友達です。おしゃべりしましょう！中国語、日本語、英語で話しかけてくれていいですよ。'
       }]);
@@ -51,36 +49,34 @@
       const recognitionRef = useRef(null);
       const messagesEndRef = useRef(null);
 
-      // --- 声のリストを強制的に更新する仕組み ---
-      const refreshVoices = () => {
+      // --- 声のリストを読み込む関数 ---
+      const loadVoices = () => {
         if ('speechSynthesis' in window) {
-          // Android対策：一度ダミーの音声を再生しようとすることでエンジンを目覚めさせる
-          const dummyUtterance = new SpeechSynthesisUtterance("");
-          window.speechSynthesis.speak(dummyUtterance);
-          
-          const voices = window.speechSynthesis.getVoices();
-          setVoiceCount(voices.length);
-          if (voices.length === 0) {
-            showError("音声リストを取得中... 画面をどこかタップしてください。");
-          }
+          const v = window.speechSynthesis.getVoices();
+          setVoiceCount(v.length);
         }
       };
 
       useEffect(() => {
         if ('speechSynthesis' in window) {
-          refreshVoices();
-          window.speechSynthesis.onvoiceschanged = () => {
-            const voices = window.speechSynthesis.getVoices();
-            setVoiceCount(voices.length);
+          loadVoices();
+          window.speechSynthesis.onvoiceschanged = loadVoices;
+          
+          // 初回タップ時に音声を叩き起こすイベント
+          const wakeUpAudio = () => {
+            const ut = new SpeechSynthesisUtterance("");
+            window.speechSynthesis.speak(ut);
+            loadVoices();
+            window.removeEventListener('click', wakeUpAudio);
+            window.removeEventListener('touchstart', wakeUpAudio);
           };
-          // 定期的にチェック（Voices: 0 対策）
-          const interval = setInterval(() => {
-            if (window.speechSynthesis.getVoices().length > 0) {
-              setVoiceCount(window.speechSynthesis.getVoices().length);
-              clearInterval(interval);
-            }
-          }, 1000);
-          return () => clearInterval(interval);
+          window.addEventListener('click', wakeUpAudio);
+          window.addEventListener('touchstart', wakeUpAudio);
+          
+          return () => {
+            window.removeEventListener('click', wakeUpAudio);
+            window.removeEventListener('touchstart', wakeUpAudio);
+          };
         }
       }, []);
 
@@ -175,8 +171,8 @@
 
         const voices = window.speechSynthesis.getVoices();
         if (voices.length === 0) {
-          showError("音声エンジンを起動中... もう一度押してください。");
-          refreshVoices();
+          showError("音声の準備ができていません。もう一度試すか、画面をタップしてください。");
+          loadVoices();
           return;
         }
 
@@ -199,13 +195,13 @@
       if (!apiKey) {
         return (
           <div className="h-screen flex items-center justify-center p-6 bg-teal-600 font-sans">
-            <div className="bg-white p-8 rounded-3xl shadow-2xl w-full max-w-md text-center">
+            <div className="bg-white p-8 rounded-3xl shadow-2xl w-full max-w-md text-center border-t-8 border-teal-500">
               <div className="text-5xl mb-4">🇹🇼</div>
               <h2 className="text-2xl font-bold text-stone-800 mb-2">Welcome!</h2>
               <p className="text-stone-500 text-sm mb-6 leading-relaxed">
-                GitHubに公開するため、APIキーを入力してください。
+                APIキーを入力してください。スマホにのみ安全に保存されます。
               </p>
-              <input type="password" value={tempKey} onChange={(e) => setTempKey(e.target.value)} placeholder="AIza... で始まるAPIキー" className="w-full bg-stone-100 border border-stone-200 rounded-xl px-4 py-4 mb-4 outline-none focus:ring-2 focus:ring-teal-500 transition-all text-center font-mono" />
+              <input type="password" value={tempKey} onChange={(e) => setTempKey(e.target.value)} placeholder="AIza... APIキー" className="w-full bg-stone-100 border border-stone-200 rounded-xl px-4 py-4 mb-4 outline-none focus:ring-2 focus:ring-teal-500 transition-all text-center font-mono" />
               <button onClick={handleKeySave} className="w-full bg-teal-600 text-white font-bold py-4 rounded-xl shadow-lg active:scale-95 transition-all">
                 チャットを開始
               </button>
@@ -219,30 +215,23 @@
           <header className="bg-teal-600 text-white p-4 shadow-md flex justify-between items-center z-10">
             <div>
               <h1 className="text-lg font-bold leading-tight">台灣朋友</h1>
-              <p className="text-[9px] opacity-75 uppercase tracking-widest">Master Edition</p>
+              <p className="text-[10px] opacity-75 uppercase tracking-widest">Master Edition</p>
             </div>
-            <div className="flex space-x-2">
-              <button onClick={refreshVoices} className="text-[9px] border border-teal-400 px-2 py-1 rounded-lg">
-                音声リセット
-              </button>
-              <button onClick={handleKeyReset} className="text-[9px] border border-teal-400 px-2 py-1 rounded-lg">
-                Key変更
-              </button>
-            </div>
+            <button onClick={handleKeyReset} className="text-[10px] border border-teal-400 px-3 py-1.5 rounded-lg active:bg-teal-700 text-teal-50">
+              Key変更
+            </button>
           </header>
-
-          {errorMessage && <div className="bg-red-500 text-white text-xs p-2 text-center fixed top-16 w-full z-20 shadow-lg">{errorMessage}</div>}
 
           <main className="flex-1 overflow-y-auto p-4 space-y-4 pb-24">
             {messages.map(m => (
               <div key={m.id} className={`flex ${m.role==='user'?'justify-end':'justify-start'}`}>
-                <div className={`${m.role==='user'?'bg-teal-100':'bg-white border'} p-4 rounded-2xl max-w-[85%] relative shadow-sm`}>
+                <div className={`${m.role==='user'?'bg-teal-100 shadow-sm text-teal-900':'bg-white border shadow-sm text-stone-800'} p-4 rounded-2xl max-w-[85%] relative`}>
                   {m.role==='model' && (
-                    <button onClick={() => speak(m.id, m.reply)} className="absolute -right-2 -top-2 bg-white rounded-full p-2.5 shadow border text-teal-600 active:scale-90 transition-transform">
+                    <button onClick={() => speak(m.id, m.reply)} className="absolute -right-2 -top-2 bg-white rounded-full p-2.5 shadow-md border text-teal-600 active:scale-90 transition-transform">
                       {audioState.id === m.id && audioState.status === 'playing' ? <VolumeIcon/> : <PlayIcon/>}
                     </button>
                   )}
-                  <div className="text-lg text-stone-800 leading-relaxed">{m.role==='user' ? m.rawText : m.reply}</div>
+                  <div className="text-lg leading-relaxed">{m.role==='user' ? m.rawText : m.reply}</div>
                   <div className="text-stone-500 text-[10px] mt-1 font-mono tracking-wider">{m.role==='user' ? m.correctedPinyin : m.replyPinyin}</div>
                   {m.role==='user' && m.correctedText && <div className="text-teal-700 text-sm mt-2 border-t pt-2 border-teal-200 font-medium italic">修正: {m.correctedText}</div>}
                   {m.role==='model' && <div className="text-stone-600 text-sm mt-2 border-t pt-2 border-stone-100">{m.translation}</div>}
@@ -262,13 +251,14 @@
                 <SendIcon/>
               </button>
             </div>
-            {/* バージョン表示 */}
-            <div className="flex justify-center items-center space-x-2 text-[8px] text-stone-400 mt-2 font-mono">
-              <span className={voiceCount === 0 ? "text-red-400 font-bold voice-loading" : "text-teal-500"}>
+            
+            {/* デバッグ用ブロック (復活) */}
+            <div className="flex justify-center items-center space-x-2 text-[8px] text-stone-400 mt-2 font-mono border-t pt-1 border-stone-100">
+              <span className={voiceCount === 0 ? "text-red-400 font-bold debug-pulse" : "text-teal-600"}>
                 Voices: {voiceCount}
               </span>
               <span>|</span>
-              <span>v2026.03.12-0235</span>
+              <span>v2026.03.12-0255</span>
             </div>
           </footer>
         </div>
@@ -279,5 +269,5 @@
   </script>
 </body>
 </html>
-<!-- v2026.03.12-0235 -->
+<!-- v2026.03.12-0255 -->
 
