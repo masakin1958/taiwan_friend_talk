@@ -3,16 +3,22 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <meta name="theme-color" content="#0d9488">
-  <title>台灣朋友 (Taiwan Friend) - Master Edition</title>
   
-  <!-- ライブラリ読み込み -->
+  <!-- マナス君対策：キャッシュを無効化して常に最新版を読み込ませる命令 -->
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+
+  <title>台灣朋友 (Taiwan Friend) - Master v2026.03.12-0730</title>
+  
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.6/babel.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     body { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+    /* キーボード表示時も崩れないレイアウト */
+    .app-viewport { height: 100dvh; width: 100%; display: flex; flex-direction: column; overflow: hidden; position: fixed; }
     .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
     ::-webkit-scrollbar { width: 4px; }
     ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
@@ -20,13 +26,12 @@
     @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.4; } 100% { opacity: 1; } }
   </style>
 </head>
-<body class="bg-stone-50 overflow-hidden text-stone-800">
+<body class="bg-stone-50 text-stone-800">
   <div id="root"></div>
 
   <script type="text/babel">
     const { useState, useEffect, useRef } = React;
 
-    // --- アイコンコンポーネント ---
     const MicIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>;
     const StopIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/></svg>;
     const SendIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="22" x2="11" y1="2" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>;
@@ -37,15 +42,12 @@
     function App() {
       const [apiKey, setApiKey] = useState(localStorage.getItem('gemini_api_key_v3') || "");
       const [tempKey, setTempKey] = useState("");
-      
-      // 最初のメッセージ（完全に中国語に修正）
       const [messages, setMessages] = useState([{
         id: 1, role: 'model',
         reply: '你好！我是你的台灣朋友。我們來聊天吧！你可以用中文、日文或英文跟我說話喔。',
         replyPinyin: 'Nǐ hǎo! Wǒ shì nǐ de Táiwān péngyǒu. Wǒmen lái liáotiān ba! Nǐ kěyǐ yòng zhōngwén, rìwén huò yīngwén gēn wǒ shuōhuà ō.',
         translation: 'こんにちは！私はあなたの台湾の友達です。おしゃべりしましょう！中国語、日本語、英語で話しかけてくれていいですよ。'
       }]);
-      
       const [inputText, setInputText] = useState("");
       const [isRecording, setIsRecording] = useState(false);
       const [isLoading, setIsLoading] = useState(false);
@@ -54,8 +56,9 @@
 
       const recognitionRef = useRef(null);
       const messagesEndRef = useRef(null);
+      const utterRef = useRef(null);
 
-      // --- 声のリストを更新する関数 ---
+      // --- 声のリストを更新 ---
       const refreshVoices = () => {
         if ('speechSynthesis' in window) {
           const v = window.speechSynthesis.getVoices();
@@ -70,15 +73,14 @@
           refreshVoices();
           window.speechSynthesis.onvoiceschanged = refreshVoices;
           
-          // Android対策：最初のタッチで「無音再生」してエンジンを叩き起こす
-          const unlockAudio = () => {
-            const silent = new SpeechSynthesisUtterance("");
-            window.speechSynthesis.speak(silent);
+          // Android Chrome対策: タッチ時に「目覚まし再生」
+          const wakeup = () => {
+            window.speechSynthesis.speak(new SpeechSynthesisUtterance(""));
             refreshVoices();
-            window.removeEventListener('touchstart', unlockAudio);
+            window.removeEventListener('touchstart', wakeup);
           };
-          window.addEventListener('touchstart', unlockAudio);
-          return () => window.removeEventListener('touchstart', unlockAudio);
+          window.addEventListener('touchstart', wakeup);
+          return () => window.removeEventListener('touchstart', wakeup);
         }
       }, []);
 
@@ -86,25 +88,22 @@
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
       }, [messages, isLoading]);
 
-      // --- キー設定 ---
       const handleKeySave = () => {
         if (tempKey.trim().startsWith("AIza")) {
-          const k = tempKey.trim();
-          localStorage.setItem('gemini_api_key_v3', k);
-          setApiKey(k);
+          localStorage.setItem('gemini_api_key_v3', tempKey.trim());
+          setApiKey(tempKey.trim());
         } else {
-          alert("有効なAPIキーを入力してください。");
+          alert("有効なキーを入力してください");
         }
       };
 
       const handleKeyReset = () => {
-        if(confirm("APIキーを消去してログアウトしますか？")) {
+        if(confirm("APIキーを消去しますか？")) {
           localStorage.removeItem('gemini_api_key_v3');
           setApiKey("");
         }
       };
 
-      // --- 音声認識（マイク） ---
       useEffect(() => {
         if (apiKey && ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
           const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -117,7 +116,6 @@
         }
       }, [apiKey]);
 
-      // --- 送信処理 ---
       const handleSend = async () => {
         if (!inputText.trim() || isLoading) return;
         const text = inputText.trim();
@@ -128,7 +126,7 @@
 
         try {
           const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
-          const sys = "あなたは台湾人の言語パートナー。繁体字で返答し、文の添削をJSON形式で返してください。";
+          const sys = "台湾人のと言語パートナー。繁体字で返答し添削をJSONで。";
           const payload = {
             contents: messages.filter(m => m.id !== 1).map(m => ({
               role: m.role, parts: [{ text: m.role==='user' ? m.rawText : m.reply }]
@@ -151,7 +149,7 @@
           setMessages(prev => prev.map(m => m.id === userMsg.id ? {...m, ...res.correction} : m));
           setMessages(prev => [...prev, { id: Date.now()+1, role: 'model', ...res.reply }]);
         } catch (e) {
-          alert("通信エラーが発生しました。");
+          alert("エラーが発生しました。");
           setMessages(prev => prev.filter(m => m.id !== userMsg.id));
           setInputText(text);
         } finally {
@@ -159,40 +157,36 @@
         }
       };
 
-      // --- 音声再生（スピーカー） ---
       const speak = (msgId, text) => {
         if (!('speechSynthesis' in window)) return;
         
         window.speechSynthesis.cancel();
-        window.speechSynthesis.resume(); 
+        window.speechSynthesis.resume(); // マナス君推奨
 
         if (audioState.id === msgId && audioState.status === 'playing') {
           setAudioState({ id: null, status: 'idle' });
           return;
         }
 
-        // アイコンを「砂時計」に
         setAudioState({ id: msgId, status: 'loading' });
 
         const voices = refreshVoices();
-        
-        // 音声リストが空なら強制的に再試行
         if (voices.length === 0) {
-          window.speechSynthesis.speak(new SpeechSynthesisUtterance("")); // 叩き起こし
+          window.speechSynthesis.speak(new SpeechSynthesisUtterance("")); 
           setTimeout(() => {
-            const v2 = refreshVoices();
-            if (v2.length > 0) speak(msgId, text); // リストが取れたら再試行
-            else setAudioState({ id: null, status: 'idle' });
-          }, 500);
+            if (refreshVoices().length > 0) speak(msgId, text);
+            else {
+              alert("音声を準備中です。もう一度押してください。");
+              setAudioState({ id: null, status: 'idle' });
+            }
+          }, 300);
           return;
         }
 
         const ut = new SpeechSynthesisUtterance(text);
-        const targetVoice = voices.find(v => v.lang.includes('zh-TW')) || 
-                            voices.find(v => v.lang.includes('zh-')) || 
-                            voices.find(v => v.lang.includes('ja'));
-
-        if (targetVoice) ut.voice = targetVoice; else ut.lang = 'zh-TW';
+        utterRef.current = ut; 
+        const v = voices.find(v => v.lang.includes('zh-TW')) || voices.find(v => v.lang.includes('zh-')) || voices.find(v => v.lang.includes('ja'));
+        if (v) ut.voice = v; else ut.lang = 'zh-TW';
         
         ut.rate = 0.9;
         ut.onstart = () => setAudioState({ id: msgId, status: 'playing' });
@@ -202,15 +196,14 @@
         window.speechSynthesis.speak(ut);
       };
 
-      // ログイン画面
       if (!apiKey) {
         return (
           <div className="h-screen flex items-center justify-center p-6 bg-teal-600 font-sans text-stone-800">
             <div className="bg-white p-8 rounded-3xl shadow-2xl w-full max-w-md text-center">
               <div className="text-5xl mb-4">🇹🇼</div>
-              <h2 className="text-2xl font-bold mb-2">Welcome!</h2>
-              <p className="text-stone-500 text-sm mb-6 leading-relaxed">APIキーを入力してください。<br/>あなたのスマホにのみ保存されます。</p>
-              <input type="password" value={tempKey} onChange={(e) => setTempKey(e.target.value)} placeholder="AIza... APIキー" className="w-full bg-stone-100 border border-stone-200 rounded-xl px-4 py-4 mb-4 text-center font-mono outline-none focus:ring-2 focus:ring-teal-500" />
+              <h2 className="text-2xl font-bold mb-2 text-stone-800">Welcome!</h2>
+              <p className="text-stone-500 text-sm mb-6 leading-relaxed">APIキーを入力してください。</p>
+              <input type="password" value={tempKey} onChange={(e) => setTempKey(e.target.value)} placeholder="AIza... APIキー" className="w-full bg-stone-100 border border-stone-200 rounded-xl px-4 py-4 mb-4 text-center font-mono outline-none" />
               <button onClick={handleKeySave} className="w-full bg-teal-600 text-white font-bold py-4 rounded-xl shadow-lg active:scale-95 transition-all">開始</button>
             </div>
           </div>
@@ -218,40 +211,37 @@
       }
 
       return (
-        <div className="flex flex-col h-[100dvh] bg-stone-50 font-sans overflow-hidden">
-          {/* ヘッダー */}
-          <header className="bg-teal-600 text-white p-4 shadow-md flex justify-between items-center z-20 shrink-0">
+        <div className="app-viewport bg-stone-50 font-sans">
+          <header className="bg-teal-600 text-white p-4 shadow-md flex justify-between items-center z-30 shrink-0">
             <div>
-              <h1 className="text-lg font-bold">台灣朋友</h1>
-              <p className="text-[9px] opacity-75 uppercase">Master v2026.03.12-0515</p>
+              <h1 className="text-lg font-bold leading-tight">台灣朋友</h1>
+              <p className="text-[10px] opacity-75 uppercase">Master v2026.03.12-0730</p>
             </div>
             <button onClick={handleKeyReset} className="text-[10px] border border-teal-400 px-3 py-1.5 rounded-lg active:bg-teal-700">Key変更</button>
           </header>
 
-          {/* メッセージエリア */}
-          <main className="flex-1 overflow-y-auto p-4 space-y-4 bg-stone-50">
+          <main className="flex-1 overflow-y-auto p-4 space-y-4 bg-stone-50 pb-8 scroll-smooth">
             {messages.map(m => (
               <div key={m.id} className={`flex ${m.role==='user'?'justify-end':'justify-start'}`}>
-                <div className={`${m.role==='user'?'bg-teal-100 text-teal-900 shadow-sm':'bg-white border shadow-sm text-stone-800'} p-4 rounded-2xl max-w-[85%] relative`}>
+                <div className={`${m.role==='user'?'bg-teal-100 text-teal-900 shadow-sm':'bg-white border shadow-sm text-stone-800'} p-4 rounded-2xl max-w-[88%] relative`}>
                   {m.role==='model' && (
                     <button onClick={() => speak(m.id, m.reply)} className="absolute -right-2 -top-2 bg-white rounded-full p-2.5 shadow-md border text-teal-600 active:scale-90 transition-transform">
                       {audioState.id === m.id ? (audioState.status === 'playing' ? <VolumeIcon/> : <SpinnerIcon/>) : <PlayIcon/>}
                     </button>
                   )}
                   <div className="text-lg leading-relaxed">{m.role==='user' ? m.rawText : m.reply}</div>
-                  <div className="text-stone-Stone text-[10px] mt-1 font-mono tracking-wider">{m.role==='user' ? m.correctedPinyin : m.replyPinyin}</div>
+                  <div className="text-stone-500 text-[10px] mt-1 font-mono tracking-wider">{m.role==='user' ? m.correctedPinyin : m.replyPinyin}</div>
                   {m.role==='user' && m.correctedText && <div className="text-teal-700 text-sm mt-2 border-t pt-2 border-teal-200 font-medium italic">修正: {m.correctedText}</div>}
                   {m.role==='model' && <div className="text-stone-600 text-sm mt-2 border-t pt-2 border-stone-100">{m.translation}</div>}
                 </div>
               </div>
             ))}
-            <div ref={messagesEndRef} />
+            <div ref={messagesEndRef} className="h-4" />
           </main>
 
-          {/* フッター */}
-          <footer className="bg-white border-t p-3 pb-safe z-20 shrink-0 shadow-[0_-4px_10px_rgba(0,0,0,0.03)]">
-            <div className="flex items-center space-x-2 max-w-4xl mx-auto">
-              <button onClick={() => { if(isRecording) recognitionRef.current.stop(); else { recognitionRef.current.start(); setIsRecording(true); } }} className={`p-3.5 rounded-full shadow-sm shrink-0 ${isRecording?'bg-red-500 text-white animate-pulse':'bg-stone-100 text-stone-600'}`}>
+          <footer className="bg-white border-t p-3 pb-safe z-30 shrink-0 shadow-[0_-4px_12px_rgba(0,0,0,0.05)]">
+            <div className="flex items-center space-x-2 max-w-4xl mx-auto min-h-[48px]">
+              <button onClick={() => { if(isRecording) recognitionRef.current.stop(); else { recognitionRef.current.start(); setIsRecording(true); } }} className={`p-3.5 rounded-full shadow-sm shrink-0 transition-colors ${isRecording?'bg-red-500 text-white animate-pulse':'bg-stone-100 text-stone-600'}`}>
                 {isRecording ? <StopIcon/> : <MicIcon/>}
               </button>
               
@@ -271,11 +261,11 @@
             </div>
             
             <div className="flex justify-center items-center space-x-2 text-[8px] text-stone-400 mt-2 font-mono">
-              <span className={voiceCount === 0 ? "text-red-400 font-bold voice-loading" : "text-teal-500"}>
-                Voices: {voiceCount}
+              <span className={voiceCount === 0 ? "text-red-400 font-bold voice-loading" : "text-teal-600 font-bold"}>
+                VOICES: {voiceCount}
               </span>
               <span>|</span>
-              <span>v2026.03.12-0515</span>
+              <span>GITHUB PAGES (CACHE CONTROL ON)</span>
             </div>
           </footer>
         </div>
@@ -287,5 +277,5 @@
   </script>
 </body>
 </html>
-<!-- v2026.03.12-0515 -->
+<!-- v2026.03.12-0730 -->
 
