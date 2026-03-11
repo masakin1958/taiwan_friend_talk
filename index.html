@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>台灣朋友 (Taiwan Friend) - Master Edition</title>
   
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
@@ -10,12 +10,14 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.6/babel.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
-    body { -webkit-tap-highlight-color: transparent; }
+    body { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
     .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
     ::-webkit-scrollbar { width: 4px; }
     ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
-    .debug-pulse { animation: pulse 2s infinite; }
+    .voice-loading { animation: pulse 1.5s infinite; }
     @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.4; } 100% { opacity: 1; } }
+    /* 入力欄が伸びすぎないための制限 */
+    .input-area { max-height: 120px; }
   </style>
 </head>
 <body class="bg-stone-50 overflow-hidden text-stone-800">
@@ -29,13 +31,14 @@
     const SendIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="22" x2="11" y1="2" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>;
     const PlayIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>;
     const VolumeIcon = () => <svg className="animate-pulse" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>;
+    const SpinnerIcon = () => <svg className="animate-spin" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>;
 
     function App() {
       const [apiKey, setApiKey] = useState(localStorage.getItem('gemini_api_key_v3') || "");
       const [tempKey, setTempKey] = useState("");
       const [messages, setMessages] = useState([{
         id: 1, role: 'model',
-        reply: '你好！我是你的台灣朋友。我們来聊天吧！你可以用中文、日文或英文跟我說話喔。',
+        reply: '你好！我是你的台灣朋友。我們來聊天吧！你可以用中文、日文或英文跟我說話喔。',
         replyPinyin: 'Nǐ hǎo! Wǒ shì nǐ de Táiwān péngyǒu. Wǒmen lái liáotiān ba! Nǐ kěyǐ yòng zhōngwén, rìwén huò yīngwén gēn wǒ shuōhuà ō.',
         translation: 'こんにちは！私はあなたの台湾の友達です。おしゃべりしましょう！中国語、日本語、英語で話しかけてくれていいですよ。'
       }]);
@@ -49,8 +52,8 @@
       const recognitionRef = useRef(null);
       const messagesEndRef = useRef(null);
 
-      // --- 声のリストを読み込む関数 ---
-      const loadVoices = () => {
+      // --- 音声リストの更新 ---
+      const refreshVoices = () => {
         if ('speechSynthesis' in window) {
           const v = window.speechSynthesis.getVoices();
           setVoiceCount(v.length);
@@ -59,26 +62,22 @@
 
       useEffect(() => {
         if ('speechSynthesis' in window) {
-          loadVoices();
-          window.speechSynthesis.onvoiceschanged = loadVoices;
-          
-          // 初回タップ時に音声を叩き起こすイベント
-          const wakeUpAudio = () => {
-            const ut = new SpeechSynthesisUtterance("");
-            window.speechSynthesis.speak(ut);
-            loadVoices();
-            window.removeEventListener('click', wakeUpAudio);
-            window.removeEventListener('touchstart', wakeUpAudio);
+          refreshVoices();
+          window.speechSynthesis.onvoiceschanged = refreshVoices;
+          // 初回クリック時に音声を起動
+          const unlock = () => {
+            window.speechSynthesis.speak(new SpeechSynthesisUtterance(""));
+            refreshVoices();
+            window.removeEventListener('touchstart', unlock);
           };
-          window.addEventListener('click', wakeUpAudio);
-          window.addEventListener('touchstart', wakeUpAudio);
-          
-          return () => {
-            window.removeEventListener('click', wakeUpAudio);
-            window.removeEventListener('touchstart', wakeUpAudio);
-          };
+          window.addEventListener('touchstart', unlock);
+          return () => window.removeEventListener('touchstart', unlock);
         }
       }, []);
+
+      useEffect(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+      }, [messages, isLoading]);
 
       const handleKeySave = () => {
         if (tempKey.trim().startsWith("AIza")) {
@@ -86,12 +85,12 @@
           localStorage.setItem('gemini_api_key_v3', key);
           setApiKey(key);
         } else {
-          showError("有効なAPIキーを入力してください。");
+          showError("正しいAPIキーを入力してください。");
         }
       };
 
       const handleKeyReset = () => {
-        if(confirm("APIキーをリセットしますか？")) {
+        if(confirm("APIキーを消去しますか？")) {
           localStorage.removeItem('gemini_api_key_v3');
           setApiKey("");
         }
@@ -108,10 +107,6 @@
           recognitionRef.current.onerror = () => setIsRecording(false);
         }
       }, [apiKey]);
-
-      useEffect(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-      }, [messages, isLoading]);
 
       const showError = (msg) => {
         setErrorMessage(msg);
@@ -151,7 +146,7 @@
           setMessages(prev => prev.map(m => m.id === userMsg.id ? {...m, ...res.correction} : m));
           setMessages(prev => [...prev, { id: Date.now()+1, role: 'model', ...res.reply }]);
         } catch (e) {
-          showError("通信エラーが発生しました。");
+          showError("エラーが発生しました。");
           setMessages(prev => prev.filter(m => m.id !== userMsg.id));
           setInputText(text);
         } finally {
@@ -169,23 +164,25 @@
           return setAudioState({ id: null, status: 'idle' });
         }
 
+        // まずは「ロード中（アイコン変化）」にする
+        setAudioState({ id: msgId, status: 'loading' });
+        
+        const utterance = new SpeechSynthesisUtterance(text);
         const voices = window.speechSynthesis.getVoices();
+        
+        // 音声が0なら強制リセット
         if (voices.length === 0) {
-          showError("音声の準備ができていません。もう一度試すか、画面をタップしてください。");
-          loadVoices();
+          refreshVoices();
+          showError("音声を読み込んでいます。もう一度押してください。");
+          setAudioState({ id: null, status: 'idle' });
           return;
         }
 
-        setAudioState({ id: msgId, status: 'playing' });
-        const utterance = new SpeechSynthesisUtterance(text);
-        
-        const targetVoice = voices.find(v => v.lang.includes('zh-TW')) || 
-                            voices.find(v => v.lang.includes('zh-')) || 
-                            voices.find(v => v.lang.includes('ja'));
-
-        if (targetVoice) utterance.voice = targetVoice; else utterance.lang = 'zh-TW';
+        const v = voices.find(v => v.lang.includes('zh-TW')) || voices.find(v => v.lang.includes('zh-')) || voices.find(v => v.lang.includes('ja'));
+        if (v) utterance.voice = v; else utterance.lang = 'zh-TW';
         
         utterance.rate = 0.9;
+        utterance.onstart = () => setAudioState({ id: msgId, status: 'playing' });
         utterance.onend = () => setAudioState({ id: null, status: 'idle' });
         utterance.onerror = () => setAudioState({ id: null, status: 'idle' });
         
@@ -195,16 +192,14 @@
       if (!apiKey) {
         return (
           <div className="h-screen flex items-center justify-center p-6 bg-teal-600 font-sans">
-            <div className="bg-white p-8 rounded-3xl shadow-2xl w-full max-w-md text-center border-t-8 border-teal-500">
+            <div className="bg-white p-8 rounded-3xl shadow-2xl w-full max-w-md text-center">
               <div className="text-5xl mb-4">🇹🇼</div>
               <h2 className="text-2xl font-bold text-stone-800 mb-2">Welcome!</h2>
               <p className="text-stone-500 text-sm mb-6 leading-relaxed">
                 APIキーを入力してください。スマホにのみ安全に保存されます。
               </p>
               <input type="password" value={tempKey} onChange={(e) => setTempKey(e.target.value)} placeholder="AIza... APIキー" className="w-full bg-stone-100 border border-stone-200 rounded-xl px-4 py-4 mb-4 outline-none focus:ring-2 focus:ring-teal-500 transition-all text-center font-mono" />
-              <button onClick={handleKeySave} className="w-full bg-teal-600 text-white font-bold py-4 rounded-xl shadow-lg active:scale-95 transition-all">
-                チャットを開始
-              </button>
+              <button onClick={handleKeySave} className="w-full bg-teal-600 text-white font-bold py-4 rounded-xl shadow-lg active:scale-95 transition-all">チャットを開始</button>
             </div>
           </div>
         );
@@ -212,23 +207,23 @@
 
       return (
         <div className="flex flex-col h-screen bg-stone-50 font-sans">
-          <header className="bg-teal-600 text-white p-4 shadow-md flex justify-between items-center z-10">
+          {/* ヘッダーは固定 */}
+          <header className="bg-teal-600 text-white p-4 shadow-md flex justify-between items-center z-10 shrink-0">
             <div>
-              <h1 className="text-lg font-bold leading-tight">台灣朋友</h1>
-              <p className="text-[10px] opacity-75 uppercase tracking-widest">Master Edition</p>
+              <h1 className="text-lg font-bold">台灣朋友</h1>
+              <p className="text-[9px] opacity-75 uppercase">Master Edition</p>
             </div>
-            <button onClick={handleKeyReset} className="text-[10px] border border-teal-400 px-3 py-1.5 rounded-lg active:bg-teal-700 text-teal-50">
-              Key変更
-            </button>
+            <button onClick={handleKeyReset} className="text-[10px] border border-teal-400 px-3 py-1.5 rounded-lg active:bg-teal-700">Key変更</button>
           </header>
 
-          <main className="flex-1 overflow-y-auto p-4 space-y-4 pb-24">
+          {/* メッセージエリアは可変（自動スクロール） */}
+          <main className="flex-1 overflow-y-auto p-4 space-y-4 pb-4 bg-stone-50">
             {messages.map(m => (
               <div key={m.id} className={`flex ${m.role==='user'?'justify-end':'justify-start'}`}>
-                <div className={`${m.role==='user'?'bg-teal-100 shadow-sm text-teal-900':'bg-white border shadow-sm text-stone-800'} p-4 rounded-2xl max-w-[85%] relative`}>
+                <div className={`${m.role==='user'?'bg-teal-100 text-teal-900':'bg-white border shadow-sm text-stone-800'} p-4 rounded-2xl max-w-[85%] relative`}>
                   {m.role==='model' && (
                     <button onClick={() => speak(m.id, m.reply)} className="absolute -right-2 -top-2 bg-white rounded-full p-2.5 shadow-md border text-teal-600 active:scale-90 transition-transform">
-                      {audioState.id === m.id && audioState.status === 'playing' ? <VolumeIcon/> : <PlayIcon/>}
+                      {audioState.id === m.id ? (audioState.status === 'playing' ? <VolumeIcon/> : <SpinnerIcon/>) : <PlayIcon/>}
                     </button>
                   )}
                   <div className="text-lg leading-relaxed">{m.role==='user' ? m.rawText : m.reply}</div>
@@ -241,24 +236,30 @@
             <div ref={messagesEndRef} />
           </main>
 
-          <footer className="fixed bottom-0 w-full bg-white border-t p-3 pb-safe z-10 shadow-[0_-2px_10px_rgba(0,0,0,0.05)]">
+          {/* フッター（入力欄）は画面下に固定 */}
+          <footer className="bg-white border-t p-3 pb-safe z-10 shrink-0">
             <div className="flex items-center space-x-2 max-w-4xl mx-auto">
-              <button onClick={() => { if(isRecording) recognitionRef.current.stop(); else { recognitionRef.current.start(); setIsRecording(true); } }} className={`p-3.5 rounded-full shadow-sm ${isRecording?'bg-red-500 text-white animate-pulse':'bg-stone-100 text-stone-600'}`}>
+              <button onClick={() => { if(isRecording) recognitionRef.current.stop(); else { recognitionRef.current.start(); setIsRecording(true); } }} className={`p-3.5 rounded-full shadow-sm transition-all ${isRecording?'bg-red-500 text-white animate-pulse':'bg-stone-100 text-stone-600'}`}>
                 {isRecording ? <StopIcon/> : <MicIcon/>}
               </button>
-              <input type="text" value={inputText} onChange={e => setInputText(e.target.value)} onKeyDown={e => e.key==='Enter'&&handleSend()} placeholder="台湾語で話そう..." className="flex-1 bg-stone-100 rounded-2xl px-5 py-3 outline-none focus:ring-2 focus:ring-teal-500/20 text-stone-800" />
+              <textarea 
+                rows="1"
+                value={inputText} 
+                onChange={e => setInputText(e.target.value)} 
+                placeholder="台湾語で話そう..." 
+                className="flex-1 bg-stone-100 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-teal-500/20 text-stone-800 resize-none overflow-y-auto max-h-24"
+              />
               <button onClick={handleSend} disabled={!inputText.trim()||isLoading} className={`p-3.5 rounded-full transition-all ${!inputText.trim()||isLoading?'bg-teal-50 text-teal-200':'bg-teal-600 text-white shadow-md'}`}>
                 <SendIcon/>
               </button>
             </div>
             
-            {/* デバッグ用ブロック (復活) */}
-            <div className="flex justify-center items-center space-x-2 text-[8px] text-stone-400 mt-2 font-mono border-t pt-1 border-stone-100">
-              <span className={voiceCount === 0 ? "text-red-400 font-bold debug-pulse" : "text-teal-600"}>
+            <div className="flex justify-center items-center space-x-2 text-[8px] text-stone-400 mt-2 font-mono">
+              <span className={voiceCount === 0 ? "text-red-400 font-bold voice-loading" : "text-teal-600"}>
                 Voices: {voiceCount}
               </span>
               <span>|</span>
-              <span>v2026.03.12-0255</span>
+              <span>v2026.03.12-0305</span>
             </div>
           </footer>
         </div>
@@ -269,5 +270,5 @@
   </script>
 </body>
 </html>
-<!-- v2026.03.12-0255 -->
+<!-- v2026.03.12-0305 -->
 
